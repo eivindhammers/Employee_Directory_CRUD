@@ -1,126 +1,11 @@
-library(shiny)
-library(shinyjs)
-library(shinyBS)
-library(shinyWidgets)
-library(shinyalert)
-library(DT)
-library(shinydashboard)
-library(shinythemes)
-library(readxl)
-library(openxlsx)
-library(stringr)
-library(stringi)
-library(dplyr)
-library(tidyr)
-library(plotly)
-library(ggplot2)
-library(DBI)
-library(pool)
-library(uuid)
 
-
-########################Create sql database#############################
-
-pool <- dbPool(RSQLite::SQLite(), dbname = "db.sqlite")
-
-#Create df for data entry into sql
-employees_df <- data.frame(   title=character(),
-                              first_name=character(),
-                              last_name=character(),
-                              job_title=character(),
-                              room=character(),
-                              email=character(),
-                              phone_internal=character(),
-                              department=character(),
-                              picture=character(),
-                              monday=character(),
-                              tuesday=character(), 
-                              wednesday=character(),
-                              thursday=character(),
-                              friday=character(),
-                              saturday=character(),
-                              sunday=character(),
-                              note=character(),
-                              date=character(),
-                              image_ext=character(),
-                              row_id=character(),
-                              stringsAsFactors = FALSE)
-
-##load permanent df to store all submitted samples
-##Only has to be performed once
-
-#dbWriteTable(pool, "employees_df", employees_df, temporary = FALSE, overwrite = FALSE)
-#data <- dbReadTable(pool, "employees_df")
-
-##################Load data in sql database from Excel#################
-
-#add a unique row id
-#unique_id <- function(data){
-#    replicate(nrow(data), UUIDgenerate())
-#}
-
-#employees_data <- read_excel("Dir_Loc")
-#employees_data$date <- format(Sys.Date())
-#employees_data$row_id <- unique_id(employees_data)
-#quary <- sqlAppendTable(pool, "employees_df", employees_data, row.names = FALSE)
-#dbExecute(pool, quary)
-
-###################################Button functions####################
-
-imageDownloadbutton <- function(outputId, label = NULL){
-  tags$a(id = outputId, class = "btn btn-default shiny-download-link", href = "", 
-         target = "_blank", download = NA, icon("images"), label)
-}
-
-excelDownloadbutton <- function(outputId, label = NULL){
-  tags$a(id = outputId, class = "btn btn-default shiny-download-link", href = "", 
-         target = "_blank", download = NA, icon("file-excel"), label)
-}
-
-tableDownloadbutton <- function(outputId, label = NULL){
-  tags$a(id = outputId, class = "btn btn-default shiny-download-link", href = "", 
-         target = "_blank", download = NA, icon("download"), label)
-}
-
-####################UI################################################
-
-ui <- fluidPage(title = "Employee Directory",
-    theme = shinytheme("darkly"),
-    tags$head(
-        tags$link(rel = "stylesheet", type = "text/css", href = "stylesheet.css"),
-        tags$link(rel = "stylesheet", type = "text/css", href = "submit-form.css"),
-        tags$link(rel = "stylesheet", type = "text/css", href = "profile-form.css")
-    ),
-    #Supress all error messages. Final app only.
-    tags$style(type="text/css",
-               ".shiny-output-error { visibility: hidden; }",
-               ".shiny-output-error:before { visibility: hidden; }"
-    ),
-    useShinyjs(),
-    shinyalert::useShinyalert(),
-    navbarPage(title = div(class="navbar-title", "Employee Directory")),
-    div(class="button-container", align="right",
-        circleButton("add_button", icon = icon("plus"), status = "success",
-                     size = "lg")),
-    fluidRow(
-    div(class="search-container",
-        div(class="search-input", 
-            textInput("search_field", label = NULL, value = "", width = NULL, placeholder = "Search")),
-        uiOutput("table_filters"))),
-    uiOutput("download"),
-    dataTableOutput("employees_table"),
-        div(class="footer-container",
-            uiOutput("footer_date"),
-            div(class="footer-title", HTML("Niels van der Velden &copy; - Table Contest 2020"))),
-    tags$script(src="index.js"))
-   
 #################Server############################################
 
 server <- function(input, output, session) {
   
 ##################Data############################################
   
-employees_df <- reactive({
+participants_df <- reactive({
     
   #make reactive to
   input$submit
@@ -128,13 +13,13 @@ employees_df <- reactive({
   input$edit_button
   input$edit_button2
 
-  employees_df <- dbReadTable(pool, "employees_df")
-  return(employees_df)
+  participants_df <- dbReadTable(pool, "participants_df")
+  return(participants_df)
 })
  
 #Filtered DF
  
-employees_df_filtered <- reactive({
+participants_df_filtered <- reactive({
   
   #make reactive to
   input$submit
@@ -143,17 +28,18 @@ employees_df_filtered <- reactive({
   input$edit_button2
 
   #needed to filter table again for reactivity
-  employees_filtered <- dbReadTable(pool, "employees_df")
+  participants_filtered <- dbReadTable(pool, "participants_df")
   
-  if(!input$department_filter == "all"){employees_filtered <- employees_filtered %>% filter(grepl(input$department_filter, department, ignore.case = TRUE))}
+  if (input$location_filter != "all") {
+    participants_filtered <- participants_filtered %>% 
+      filter(grepl(input$location_filter, location, ignore.case = TRUE))
+  }
   
-  if(!input$room_filter == "all"){employees_filtered <- employees_filtered %>% filter(grepl(input$room_filter, room, ignore.case = TRUE))}
-  
-  return(employees_filtered)
+  return(participants_filtered)
   
 })
 
-employees_df_table <- reactive({
+participants_df_table <- reactive({
   
   #make reactive to
   input$submit
@@ -161,25 +47,26 @@ employees_df_table <- reactive({
   input$edit_button2
   input$edit_button
   
-  employees_filtered <- dbReadTable(pool, "employees_df")
+  participants_filtered <- dbReadTable(pool, "participants_df")
+
+  if (input$location_filter != "all") {
+    participants_filtered <- participants_filtered %>% 
+      filter(grepl(input$location_filter, location, ignore.case = TRUE))
+  }
   
-  if(!input$department_filter == "all"){employees_filtered <- employees_filtered %>% filter(grepl(input$department_filter, department, ignore.case = TRUE))}
+  participants_df_table <- participants_filtered %>% 
+    select(picture, image_ext, title, first_name, last_name, job_title, location, email, date, row_id)
   
-  if(!input$room_filter == "all"){employees_filtered <- employees_filtered %>% filter(grepl(input$room_filter, room, ignore.case = TRUE))}
-  
-  
-  employees_df_table <- employees_filtered %>% select(picture, image_ext, title, first_name, last_name, job_title, room, phone_internal, email, date, row_id)
-  
-  employees_df_table$employee <- paste0( "<b>", employees_df_table$title, " ",
-                                         employees_df_table$first_name, " ",
-                                         employees_df_table$last_name, "</b><br>",
-                                         '<div class="table-sub-title">',employees_df_table$job_title, "</div>")
-  employees_df_table$email <- str_replace(employees_df_table$email, employees_df_table$email, sprintf('<a href="mailto:%s">%s</a>',  employees_df_table$email, employees_df_table$email))
-  employees_df_table$view <- paste("<button id=\"info_button\" 
+  participants_df_table$participant <- paste0( "<b>", participants_df_table$title, " ",
+                                         participants_df_table$first_name, " ",
+                                         participants_df_table$last_name, "</b><br>",
+                                         '<div class="table-sub-title">',participants_df_table$job_title, "</div>")
+  participants_df_table$email <- str_replace(participants_df_table$email, participants_df_table$email, sprintf('<a href="mailto:%s">%s</a>',  participants_df_table$email, participants_df_table$email))
+  participants_df_table$view <- paste("<button id=\"info_button\" 
                                               type=\"button\" 
                                               class=\"btn btn-primary btn-sm\"
                                               onclick=\"Shiny.onInputChange(&quot;info_button&quot;,  Math.random())\"><i class=\"fa fa-address-card fa-2x\"></i></button>")
-  employees_df_table$actions <-paste("<button id=\"edit_button\" 
+  participants_df_table$actions <-paste("<button id=\"edit_button\" 
                                               type=\"button\" 
                                               class=\"btn btn-link btn-sm\"
                                               onclick=\"Shiny.onInputChange(&quot;edit_button&quot;,  Math.random())\"><i class=\"fa fa-edit fa-2x\"></i></button>",
@@ -189,25 +76,26 @@ employees_df_table <- reactive({
                                               onclick=\"Shiny.onInputChange(&quot;delete_button&quot;,  Math.random())\"><i class=\"fa fa-times fa-2x\"></i></button>") 
   
   #Replace picture with anonymous picture when No
-  employees_df_table$picture[employees_df_table$picture == "No"] <- paste0('<img class="profile-table-img" src="no_picture.png"></img>')
+  participants_df_table$picture[participants_df_table$picture == "No"] <- paste0('<img class="profile-table-img" src="no_picture.png"></img>')
   
   #Replace picture with profile picture when Yes
-  employees_df_table$picture <- str_replace(employees_df_table$picture, "Yes", sprintf('<img class="profile-table-img" src="profile_images/%s_%s_%s_%s.%s"></img>', 
-                                                                                       paste(employees_df_table$date), 
-                                                                                       paste(employees_df_table$first_name), 
-                                                                                       paste(employees_df_table$last_name),
-                                                                                       paste(employees_df_table$row_id),
-                                                                                       paste(employees_df_table$image_ext)
+  participants_df_table$picture <- str_replace(participants_df_table$picture, "Yes", sprintf('<img class="profile-table-img" src="profile_images/%s_%s_%s_%s.%s"></img>', 
+                                                                                       paste(participants_df_table$date), 
+                                                                                       paste(participants_df_table$first_name), 
+                                                                                       paste(participants_df_table$last_name),
+                                                                                       paste(participants_df_table$row_id),
+                                                                                       paste(participants_df_table$image_ext)
   ))
-  employees_df_table <- employees_df_table %>% select(picture, employee, view, room, phone_internal, email, actions, row_id)
-  return(employees_df_table)
+  participants_df_table <- participants_df_table %>% 
+    select(picture, participant, view, location, email, actions, row_id)
+  return(participants_df_table)
 })
 
 
 download_df <- reactive({
   
-  download_df <- dbReadTable(pool, "employees_df")
-  download_df <- download_df %>% select(last_name, first_name, title, job_title, room, phone_internal, department)
+  download_df <- dbReadTable(pool, "participants_df")
+  download_df <- download_df %>% select(last_name, first_name, title, job_title, location)
   
   return(download_df)
   
@@ -219,25 +107,11 @@ output$table_filters <- renderUI({
   
 div(class="filter-container",
       dropdownButton(
-        selectInput("department_filter", label= "Department", multiple = FALSE, choices = c("all", unique(sort(tolower(employees_df()$department))))),
-        selectInput("room_filter", label= "Room", multiple = FALSE, choices = c("all", unique(sort(tolower(employees_df()$room))))),
+        selectInput("location_filter", label= "Location", multiple = FALSE, choices = c("all", unique(sort(tolower(participants_df()$location))))),
         circle = TRUE, status = "info", 
-        icon=icon("filter"), width ="200px", size = "sm",
-        tooltip = tooltipOptions(title ="Click to see filters.")))
+        icon=icon("filter"), width = "200px", size = "sm",
+        tooltip = tooltipOptions(title = "Click to see filters.")))
   
-})
-
-observeEvent(input$department_filter, {
-  
-
-updateSelectInput(session, "room_filter", label= "Room", selected = input$room_filter,  choices = c("all", unique(tolower(sort(employees_df_filtered()$room[])))))
-  
-})
-
-observeEvent(input$room_filter, {
-  
-updateSelectInput(session, "department_filter", label= "Department", selected = input$department_filter,  choices = c("all", unique(tolower(sort(employees_df_filtered()$department[])))))
-
 })
 
 
@@ -251,7 +125,7 @@ output$download_button <- downloadHandler(
 
 output$excel_download <- downloadHandler(
   filename = function() {"employee_directory_full.xlsx"},
-  content = function(file){write.xlsx(employees_df(), file)
+  content = function(file){write.xlsx(participants_df(), file)
     
   })
 
@@ -275,7 +149,7 @@ observeEvent(input$login_link,{
                 textInput("userInp", "Login"),
                 passwordInput("pwInp", "Password"),
                 p(id="errorMessage", html("&nbsp;")),
-                actionButton("butLogin", "login", class = 'btn action-button btn-success', icon = icon('sign-in')),
+                actionButton("butLogin", "login", class = 'btn action-button btn-success', icon = icon('sign-in-alt')),
                 div(class="login-footer", actionButton("dismiss", "Dismiss")),
                 size = "s",
                 easyClose = TRUE,
@@ -337,9 +211,9 @@ observeEvent(input$dismiss,{
 
 observeEvent(input$info_button, {
   
-  sel_row <- input$employees_table_row_last_clicked
-  row_id <- employees_df_filtered()[sel_row, "row_id"]
-  table <- dbReadTable(pool, "employees_df")
+  sel_row <- input$participants_table_row_last_clicked
+  row_id <- participants_df_filtered()[sel_row, "row_id"]
+  table <- dbReadTable(pool, "participants_df")
   
   #Profile values
   
@@ -359,24 +233,8 @@ observeEvent(input$info_button, {
                                                            paste(image_ext)))}}
 
   job_title <- table[table$row_id == row_id, "job_title"]
-  room <- table[table$row_id == row_id, "room"]
+  location <- table[table$row_id == row_id, "location"]
   email <- table[table$row_id == row_id, "email"]
-  phone_internal <- table[table$row_id == row_id, "phone_internal"]
-  department <- table[table$row_id == row_id, "department"]
-
-  monday <- table[table$row_id == row_id, "monday"]
-  tuesday <- table[table$row_id == row_id, "tuesday"]
-  wednesday <- table[table$row_id == row_id, "wednesday"]
-  thursday <- table[table$row_id == row_id, "thursday"]
-  friday <- table[table$row_id == row_id, "friday"]
-  saturday <- table[table$row_id == row_id, "saturday"]
-  sunday <- table[table$row_id == row_id, "sunday"]
-  
-  if(nchar(monday) == 0){monday <- "Not Defined"}
-  if(nchar(tuesday) == 0){tuesday <- "Not Defined"}
-  if(nchar(wednesday) == 0){wednesday <- "Not Defined"}
-  if(nchar(thursday) == 0){thursday <- "Not Defined"}
-  if(nchar(friday) == 0){friday <- "Not Defined"}
 
   note <- table[table$row_id == row_id, "note"]
 
@@ -394,17 +252,8 @@ observeEvent(input$info_button, {
               first_name = paste(" ", first_name, " "),
               last_name = last_name,
               job_title = job_title,
-              department = department,
-              room = room,
-              phone_internal = phone_internal,
+              location = location,
               email = tags$a(href=sprintf("mailto:%s", email), email),
-              monday = monday,
-              tuesday = tuesday,
-              wednesday = wednesday,
-              thursday = thursday,
-              friday = friday,
-              saturday = saturday,
-              sunday = sunday,
               note = note
               
               )))))
@@ -415,9 +264,8 @@ observeEvent(input$info_button, {
 
 ##########Functions
 
-
 #List of mandatory fields for submission
-fieldsMandatory <- c("title", "first_name", "last_name", "job_title", "room", "email", "phone_internal", "department")
+fieldsMandatory <- c("title", "first_name", "last_name", "job_title", "location", "email")
 
 #define which input fields are mandatory 
 observe({
@@ -439,14 +287,11 @@ observe({
 })
 
 #define which input fields should be saved and recorded at time of submission
-fieldsAll <- c("title", "first_name", "last_name", "job_title", "room", "email", "phone_internal",
-               "department", "monday", "tuesday", 
-               "wednesday", "thursday", "friday", "saturday", "sunday", "note")  
+fieldsAll <- c("title", "first_name", "last_name", "job_title", "location", "email", "note")  
 
 #add a unique row id
 unique_id <- function(data){
     replicate(nrow(data), UUIDgenerate())
-    #paste0(seq.int(nrow(data)), round(runif(nrow(data),10000000,99999999), 0)) 
 }
 
 #Needed to reset fileInput
@@ -497,9 +342,9 @@ formData <- reactive({
 }) 
 
 #Append data to sql table
-appendData <- function(data){
-    quary <- sqlAppendTable(pool, "employees_df", data, row.names = FALSE)
-    dbExecute(pool, quary)
+appendData <- function(data) {
+    query <- sqlAppendTable(pool, "participants_df", data, row.names = FALSE)
+    dbExecute(pool, query)
 }
 
 form <- function(title, button_id, button_name){
@@ -519,21 +364,12 @@ form <- function(title, button_id, button_name){
                                                            selected = NULL, 
                                                            multiple = FALSE,
                                                            choices = c("", "Ms.", "Mr.")),
-                        first_name =  textInput("first_name", label=NULL, placeholder = NULL, width = "100%"),
-                        last_name = textInput("last_name", label=NULL, placeholder = NULL, width = "100%"),
-                        job_title = textInput("job_title", label=NULL, placeholder = NULL, width = "100%"),
-                        room = textInput("room", label=NULL, placeholder = NULL, width = "100%"),
-                        email = textInput("email", label=NULL, placeholder = NULL, width = "100%"),
-                        phone_internal = textInput("phone_internal", label=NULL, placeholder = NULL, width = "100%"), 
-                        department = textInput("department", label=NULL, placeholder = NULL, width = "100%"),
+                        first_name =  textInput("first_name", label = NULL, placeholder = NULL, width = "100%"),
+                        last_name = textInput("last_name", label = NULL, placeholder = NULL, width = "100%"),
+                        job_title = textInput("job_title", label = NULL, placeholder = NULL, width = "100%"),
+                        location = textInput("location", label = NULL, placeholder = NULL, width = "100%"),
+                        email = textInput("email", label = NULL, placeholder = NULL, width = "100%"),
                         picture_upload = fileInput("picture_upload", label = NULL, multiple = FALSE, width = "100%", accept = c('image/png', 'image/jpeg')), 
-                        monday_input = selectInput("monday", label= NULL, multiple = FALSE, choices = c("Please select"='',"Full Day", "Morning", "Afternoon", "Not working", "Home office")),
-                        tuesday_input = selectInput("tuesday", label= NULL, multiple = FALSE, choices = c("Please select"='',"Full Day", "Morning", "Afternoon", "Not working", "Home office")),
-                        wednesday_input = selectInput("wednesday", label= NULL, multiple = FALSE, choices = c("Please select"='',"Full Day", "Morning", "Afternoon", "Not working", "Home office")),
-                        thursday_input = selectInput("thursday", label= NULL, multiple = FALSE, choices = c("Please select"='',"Full Day", "Morning", "Afternoon", "Not working", "Home office")),
-                        friday_input = selectInput("friday", label= NULL, multiple = FALSE, choices = c("Please select"='',"Full Day", "Morning", "Afternoon", "Not working", "Home office")),
-                        saturday_input = selectInput("saturday", label= NULL, multiple = FALSE, choices = c("Not working", "Full Day", "Morning", "Afternoon", "Home office")),
-                        sunday_input = selectInput("sunday", label= NULL, multiple = FALSE, choices = c("Not working" ,"Full Day", "Morning", "Afternoon", "Home office")),
                         note_input = textInput("note", label=NULL, placeholder = "e.g. Monday morning home office.", width = "100%"),
                         submit_button = actionButton(button_id, button_name, icon("save"))),
                         easyClose =TRUE))))
@@ -562,7 +398,7 @@ entry_form <- reactive({
     
 })
 
-succes_alert <- reactive({
+success_alert <- reactive({
     
     #make reactive to
     input$submit
@@ -599,10 +435,16 @@ observeEvent(input$submit, priority = 20, {
   } else{
     
     appendData(formData())
-    if(file_cached == FALSE){saveData(data = input$picture_upload, outputDir = "www/profile_images")}
+    # Create participant sql table containing books read
+    table_name <- paste("participant_", formData()$row_id, sep = "")
+    book_df <- data.frame(participant_id = formData()$row_id, book_title = NA, author = NA, date = NA, pages_total = NA, pages_read = NA)
+    dbWriteTable(pool, table_name, book_df, temporary = FALSE, overwrite = FALSE)
+    if (file_cached == FALSE) { 
+      saveData(data = input$picture_upload, outputDir = "www/profile_images")
+    }
     shinyjs::reset("entry_form")
     removeModal()
-    succes_alert()
+    success_alert()
   }
 })
 
@@ -618,16 +460,16 @@ edit_form <- reactive({
 
 observeEvent(input$edit_button, priority = 20, {
   
-  sel_row<- isolate(input$employees_table_row_last_clicked) 
-  row_id <- employees_df_table()[sel_row, "row_id"] 
+  sel_row<- isolate(input$participants_table_row_last_clicked) 
+  row_id <- participants_df_table()[sel_row, "row_id"] 
   cachedRowid$row_id <- row_id
 })
 
 observeEvent(input$edit_button,{
   
-    sel_row <- input$employees_table_row_last_clicked
-    row_id <- employees_df_filtered()[sel_row, "row_id"] 
-    table <- employees_df_filtered()
+    sel_row <- input$participants_table_row_last_clicked
+    row_id <- participants_df_filtered()[sel_row, "row_id"] 
+    table <- participants_df_filtered()
 
     edit_form()
     
@@ -635,17 +477,8 @@ observeEvent(input$edit_button,{
     updateTextInput(session, "first_name", value = table[table$row_id == row_id, "first_name"])
     updateTextInput(session, "last_name", value = table[table$row_id == row_id, "last_name"])
     updateTextInput(session, "job_title", value = table[table$row_id == row_id, "job_title"])
-    updateTextInput(session, "room", value = table[table$row_id == row_id, "room"])
+    updateTextInput(session, "location", value = table[table$row_id == row_id, "location"])
     updateTextInput(session, "email", value = table[table$row_id == row_id, "email"])
-    updateTextInput(session, "phone_internal", value = table[table$row_id == row_id, "phone_internal"])
-    updateTextInput(session, "department", value = table[table$row_id == row_id, "department"])
-    updateSelectInput(session, "monday", selected = table[table$row_id == row_id, "monday"])
-    updateSelectInput(session, "tuesday", selected = table[table$row_id == row_id, "tuesday"])
-    updateSelectInput(session, "wednesday", selected = table[table$row_id == row_id, "wednesday"])
-    updateSelectInput(session, "thursday", selected = table[table$row_id == row_id, "thursday"])
-    updateSelectInput(session, "friday", selected = table[table$row_id == row_id, "friday"])
-    updateSelectInput(session, "saturday", selected = table[table$row_id == row_id, "saturday"])
-    updateSelectInput(session, "sunday", selected = table[table$row_id == row_id, "sunday"])
     updateTextInput(session, "note", value = table[table$row_id == row_id, "note"])
     
 })
@@ -653,18 +486,16 @@ observeEvent(input$edit_button,{
 removeData <- function(rowid = formData()$row_id) {
   
   # Create a unique file name
-  delfile <- dir(path="www/profile_images", pattern=paste(rowid))
+  delfile <- dir(path="www/profile_images", pattern = paste(rowid))
   file.remove(file.path("www/profile_images", delfile))
 } 
 
 renameData <- function(rowid = formData()$row_id){
   
-  table <- employees_df_filtered()
-  
+  table <- participants_df_filtered()
   
   date <- table[table$row_id == rowid, "date"]
   image_ext <- table[table$row_id == rowid, "image_ext"]
-  
   
   fileName <- sprintf("%s_%s_%s_%s.%s",  
                       date,
@@ -673,8 +504,7 @@ renameData <- function(rowid = formData()$row_id){
                       rowid,
                       image_ext)
   
-  
-  renfile <- dir(path="www/profile_images/", pattern=paste(rowid))
+  renfile <- dir(path="www/profile_images/", pattern = paste(rowid))
   file.rename(paste0("www/profile_images/", renfile), paste0("www/profile_images/", fileName))
 }
 
@@ -710,55 +540,33 @@ if(illegal_char == TRUE){
 
     removeData(rowid = row_id)
     
-    dbExecute(pool, sprintf('UPDATE "employees_df" SET "date" = ?, "title" = ?, "first_name" = ?, "last_name" = ?, 
-                          "job_title" = ?, "room" = ?, "email" = ?, "phone_internal" = ?,
-                          "department" = ?, "picture" = ?, "image_ext" = ?, "monday" = ?, "tuesday" = ?,
-                          "wednesday" = ?, "thursday" = ?, "friday" = ?, "saturday" = ?, "sunday" = ?, "note" = ?
+    dbExecute(pool, sprintf('UPDATE "participants_df" SET "date" = ?, "title" = ?, "first_name" = ?, "last_name" = ?, 
+                          "job_title" = ?, "location" = ?, "email" = ?, "picture" = ?, "image_ext" = ?, "note" = ?
                           WHERE "row_id" = ("%s")', row_id), 
               param = list(profile_date,
                            input$title,
                            cleanFun(input$first_name),
                            cleanFun(input$last_name),
                            cleanFun(input$job_title),
-                           cleanFun(input$room),
+                           cleanFun(input$location),
                            cleanFun(input$email),
-                           cleanFun(input$phone_internal),
-                           cleanFun(input$department),
                            "Yes",
                            image_ext,
-                           input$monday,
-                           input$tuesday,
-                           input$wednesday,
-                           input$thursday,
-                           input$friday,
-                           input$saturday,
-                           input$sunday,
                            input$note
               ))
     saveData(data = input$picture_upload, outputDir = "www/profile_images", rowid = row_id)
     removeModal() 
 } else{
   
-  dbExecute(pool, sprintf('UPDATE "employees_df" SET "title" = ?, "first_name" = ?, "last_name" = ?, 
-                          "job_title" = ?, "room" = ?, "email" = ?, "phone_internal" = ?,
-                          "department" = ?, "monday" = ?, "tuesday" = ?,
-                          "wednesday" = ?, "thursday" = ?, "friday" = ?, "saturday" = ?, "sunday" = ?, "note" = ?
+  dbExecute(pool, sprintf('UPDATE "participants_df" SET "title" = ?, "first_name" = ?, "last_name" = ?, 
+                          "job_title" = ?, "location" = ?, "email" = ?, "note" = ?
                           WHERE "row_id" = ("%s")', row_id), 
             param = list(input$title,
                          cleanFun(input$first_name),
                          cleanFun(input$last_name),
                          cleanFun(input$job_title),
-                         cleanFun(input$room),
+                         cleanFun(input$location),
                          cleanFun(input$email),
-                         cleanFun(input$phone_internal),
-                         cleanFun(input$department),
-                         input$monday,
-                         input$tuesday,
-                         input$wednesday,
-                         input$thursday,
-                         input$friday,
-                         input$saturday,
-                         input$sunday,
                          input$note
             ))
   renameData(rowid = row_id)
@@ -776,16 +584,17 @@ cachedRowid <- reactiveValues(
 
 observeEvent(input$delete_button, {
   
-  sel_row<- isolate(input$employees_table_row_last_clicked) 
-  row_id <- employees_df_table()[sel_row, "row_id"] 
+  sel_row<- isolate(input$participants_table_row_last_clicked) 
+  row_id <- participants_df_table()[sel_row, "row_id"] 
   cachedRowid$row_id <- row_id
+  
 })
 
 del_row <- reactive({
     
     row_id <- cachedRowid$row_id 
   
-    quary <- dbExecute(pool, sprintf('DELETE FROM "employees_df" WHERE "row_id" == ("%s")', row_id)) 
+    query <- dbExecute(pool, sprintf('DELETE FROM "participants_df" WHERE "row_id" == ("%s")', row_id)) 
 })
 
 del_screenshot_file <- function(data_path = "www/profile_images/"){
@@ -817,7 +626,7 @@ observeEvent(input$delete_button, priority = 20,{
   
 })
 
-observeEvent(input$yes_button, priority = 20,{
+observeEvent(input$yes_button, priority = 20, {
      
     del_screenshot_file()
     del_row()
@@ -825,39 +634,41 @@ observeEvent(input$yes_button, priority = 20,{
     
 })
 
-observeEvent(input$no_button, priority = 20,{
-  removeModal()
-  
-})
+observeEvent(
+    input$no_button, 
+    priority = 20, {
+        removeModal()
+    }
+)
 
 ######################################DT Output############################################
 
-
-DTproxy <- dataTableProxy("employees_table") 
+DTproxy <- dataTableProxy("participants_table") 
 observeEvent(input$search_field, {
-    updateSearch(DTproxy, keywords = list(global = input$search_field, columns = NULL))
+  updateSearch(DTproxy, keywords = list(global = input$search_field, columns = NULL))
 })
  
-output$employees_table <- DT::renderDataTable({
+output$participants_table <- DT::renderDataTable({
   
-    employees_df_table <- employees_df_table() %>% select(-row_id)
+    participants_df_table <- participants_df_table() %>% select(-row_id)
     
-    names(employees_df_table) <- c("Picture", "Employee", "View", "Room", "Phone Internal", "Email", "Actions")
+    names(participants_df_table) <- c("Bilde", "Deltaker", "Vis kort", "Sted", "E-post", "Handlinger")
     
     table <- DT::datatable(
-        employees_df_table,
+        participants_df_table,
         rownames = FALSE,
         escape = FALSE,
+        filter = "none",
         selection = "single",
         options = list(searching = TRUE, 
                        lengthChange = FALSE,
                        pageLength = 20,
                        autoWidth = FALSE,
-                       columnDefs = (list(list(width = '50px', targets =c(0, 2, 3)),
-                                          list(width = '300px', targets =c(1)),
-                                          list(width = '80px', targets =c(0,6)),
-                                          list(width = '130px', targets =c(4)),
-                                     list(className = 'dt-center', targets = c(2,3)))),
+                       columnDefs = (list(list(width = '50px', targets = c(0, 2, 3)),
+                                          list(width = '300px', targets = c(1)),
+                                          list(width = '80px', targets = c(0, 5)),
+                                          list(width = '130px', targets = c(4)),
+                                     list(className = 'dt-center', targets = c(2, 3)))),
                        initComplete = JS(
                            "function(settings, json) {",
                            "$(this.api().table().header()).css({'background-color': '#375a7f', 'color': '#fff'});",
@@ -866,9 +677,9 @@ output$employees_table <- DT::renderDataTable({
 
 output$footer_date <- renderUI({
   
-  last_modified <- max(employees_df()$date, na.rm = TRUE)
+  last_modified <- max(participants_df()$date, na.rm = TRUE)
   last_date <- as.Date(last_modified, "%Y%m%d")
-  last_time <- gsub(".*_","",last_modified)
+  last_time <- gsub(".*_", "", last_modified)
   last_time <- gsub('(..)(?=.)', '\\1:', last_time, perl=TRUE)
 
   div(class="footer-date", HTML(paste0("Last Entry: ", last_date, " ", last_time)))
@@ -877,5 +688,3 @@ output$footer_date <- renderUI({
     
 
 }
-# Run the application 
-shinyApp(ui = ui, server = server)
